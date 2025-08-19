@@ -1,12 +1,16 @@
 package no.messom.realestate.bacnet;
 
 import com.serotonin.bacnet4j.LocalDevice;
+import com.serotonin.bacnet4j.RemoteDevice;
 import com.serotonin.bacnet4j.npdu.ip.IpNetwork;
 import com.serotonin.bacnet4j.npdu.ip.IpNetworkBuilder;
 import com.serotonin.bacnet4j.service.unconfirmed.WhoIsRequest;
 import com.serotonin.bacnet4j.transport.DefaultTransport;
 import com.serotonin.bacnet4j.type.enumerated.ObjectType;
+import com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier;
 import com.serotonin.bacnet4j.type.primitive.ObjectIdentifier;
+import com.serotonin.bacnet4j.util.RemoteDeviceDiscoverer;
+import com.serotonin.bacnet4j.util.RemoteDeviceFinder;
 import org.slf4j.Logger;
 
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,9 +45,31 @@ public class BacnetCOVSubscriber {
                     .build();
             localDevice = new LocalDevice(LOCAL_DEVICE_ID, new DefaultTransport(ipNetwork));
             localDevice.initialize();
-            localDevice.getIAm();
+            /*
+            RemoteDeviceFinder.RemoteDeviceFuture remoteDeviceFuture = localDevice.getRemoteDevice(REMOTE_DEVICE_ID);
+            RemoteDevice remoteDevice = remoteDeviceFuture.get();
+            if (remoteDevice == null) {
+                log.warn("Remote device with ID {} not found", REMOTE_DEVICE_ID);
+                return;
+            }
+
+             */
+            RemoteDeviceDiscoverer discoverer = new RemoteDeviceDiscoverer(localDevice);
+            discoverer.start();
 //            localDevice.sendGlobalBroadcast(new WhoIsRequest());
+
+            Thread.sleep(5000); // Wait for discovery to complete
+            log.info("Fund {} devices on the network", discoverer.getRemoteDevices().size());
+            discoverer.stop();
+
             localDevice.sendLocalBroadcast(new WhoIsRequest());
+            //Bacnet Objects discovery
+
+            final RemoteDevice rd = new RemoteDevice(localDevice, REMOTE_DEVICE_ID);
+            final ObjectIdentifier oid = new ObjectIdentifier(ObjectType.analogValue, 0);
+            log.info("ModelName {} ",rd.getDeviceProperty(PropertyIdentifier.modelName));
+            log.info("Description {} ",rd.getObjectProperty(oid, PropertyIdentifier.activeText));
+            log.info("PresentValue {} ",rd.getObjectProperty(oid, PropertyIdentifier.presentValue));
 //            localDevice.whoIs(REMOTE_DEVICE_ID, REMOTE_IP, BACNET_PORT);
             log.info("Local BACnet device initialized with ID: {}", LOCAL_DEVICE_ID);
         } catch (Exception e) {
