@@ -15,6 +15,7 @@ import com.serotonin.bacnet4j.type.primitive.Boolean;
 import com.serotonin.bacnet4j.type.primitive.CharacterString;
 import com.serotonin.bacnet4j.type.primitive.ObjectIdentifier;
 import com.serotonin.bacnet4j.type.primitive.UnsignedInteger;
+import com.serotonin.bacnet4j.util.DiscoveryUtils;
 import com.serotonin.bacnet4j.util.RemoteDeviceDiscoverer;
 import com.serotonin.bacnet4j.util.RemoteDeviceFinder;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.slf4j.Logger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -40,6 +42,8 @@ public class BacnetCOVSubscriber {
     private LocalDevice localDevice;
     private RemoteDevice remoteDevice;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
+    private BacnetObjectRepository repository;
+    private BacnetObjectDiscoverer discoverer;
 
     public static void main(String[] args) throws Exception {
         BacnetCOVSubscriber app = new BacnetCOVSubscriber();
@@ -55,8 +59,10 @@ public class BacnetCOVSubscriber {
     public void run() throws Exception {
         try {
             initializeLocalDevice();
+            setupRepository();
             setupEventHandling();
             discoverRemoteDevice();
+            discoverAllObjects();
             setupCOVSubscription();
 
             log.info("BACnet COV Subscriber is running. Press Ctrl+C to stop.");
@@ -67,6 +73,43 @@ public class BacnetCOVSubscriber {
         } finally {
             shutdown();
         }
+    }
+
+    private void setupRepository() {
+        repository = new BacnetObjectRepository();
+        discoverer = new BacnetObjectDiscoverer(localDevice, repository);
+        log.info("Repository and discoverer initialized");
+    }
+
+    private void discoverAllObjects() throws Exception {
+        if (remoteDevice == null) {
+            throw new IllegalStateException("Cannot discover objects - remote device not available");
+        }
+
+        log.info("Starting object discovery...");
+        DiscoveryUtils.getExtendedDeviceInformation(localDevice, remoteDevice);
+        discoverer.discoverAllObjects(remoteDevice)
+                .get(30, TimeUnit.SECONDS); // Timeout etter 30 sekunder
+
+        // Vis noen eksempler på fundne objekter
+        logDiscoveredObjects();
+    }
+
+    private void logDiscoveredObjects() {
+        log.info("=== Discovered Objects Examples ===");
+
+        // Vis alle objekttyper
+        repository.getObjectsByType().forEach((type, objects) ->
+                log.info("Found {} {} objects", objects.size(), type));
+
+        // Vis første 5 objekter med navn
+        repository.getAllObjects().stream()
+                .filter(obj -> obj.getObjectName() != null)
+                .limit(5)
+                .forEach(obj -> log.info("Example: {} = {}",
+                        obj.getObjectIdentifier(), obj.getObjectName()));
+
+        log.info("=== End Examples ===");
     }
 
     private void initializeLocalDevice() throws Exception {
