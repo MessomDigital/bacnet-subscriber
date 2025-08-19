@@ -171,6 +171,7 @@ public class BacnetObjectDiscoverer {
         }
     }
 
+
     private BacnetObject createBacnetObject(RemoteDevice remoteDevice, ObjectIdentifier objectId) {
         if (objectId == null) {
             log.warn("Cannot create BacnetObject - objectId is null");
@@ -205,10 +206,34 @@ public class BacnetObjectDiscoverer {
         return bacnetObject;
     }
 
+    private Optional<Object> readObjectProperty(RemoteDevice remoteDevice, ObjectIdentifier objectId, PropertyIdentifier propertyId) {
+        if (remoteDevice == null || objectId == null || propertyId == null) {
+            return Optional.empty();
+        }
 
+        try {
+            ReadPropertyRequest request = new ReadPropertyRequest(objectId, propertyId);
+
+            // Send request og vent på svar synkront
+            ServiceFuture theFuture = localDevice.send(remoteDevice, request);
+            AcknowledgementService response = theFuture.get();
+            Object value = ((ReadPropertyAck) response).getValue();
+
+            log.debug("Successfully read {} for {}: {}", propertyId, objectId, value);
+            return Optional.ofNullable(value);
+
+        } catch (BACnetException e) {
+            log.debug("BACnet error reading {} for {}: {}", propertyId, objectId, e.getMessage());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.debug("Unexpected error reading {} for {}: {}", propertyId, objectId, e.getMessage());
+            return Optional.empty();
+        }
+    }
     /**
      * Helper metode for å trygt lese properties med proper error handling
      */
+    /*
     private Optional<Object> readObjectProperty(RemoteDevice remoteDevice, ObjectIdentifier objectId, PropertyIdentifier propertyId) {
         if (remoteDevice == null || objectId == null || propertyId == null) {
             return Optional.empty();
@@ -222,6 +247,7 @@ public class BacnetObjectDiscoverer {
             return Optional.empty();
         }
     }
+    */
 
     private boolean supportsCOV(ObjectType objectType) {
         // Objekttyper som typisk støtter COV
